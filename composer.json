@@ -1,0 +1,21 @@
+{
+    "name": "flaxandteal/wso2emm",
+    "description": "Package for interacting with a WSO2 Enterprise Mobility Manager server",
+    "authors": [
+        {
+            "name": "Phil Weir",
+            "email": "phil.weir@flaxandteal.co.uk"
+        }
+    ],
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/lemasson-h/guzzle-oauth2-plugin"
+        }
+    ],
+    "require": {
+        "guzzlehttp/guzzle": "~6.0",
+        "commerceguys/guzzle-oauth2-plugin": "dev-master"
+    },
+    "license": "MIT"
+}
