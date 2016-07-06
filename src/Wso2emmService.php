@@ -9,6 +9,8 @@ use CommerceGuys\Guzzle\Oauth2\Middleware\OAuthMiddleware;
 class Wso2emmService
 {
     public $debug = false;
+    public $client = null;
+    public $allPolicyDetails = null;
 
     public static function configureClient() {
         $verify_certificate = false;
@@ -60,44 +62,31 @@ class Wso2emmService
     }
 
     public function init() {
-        $this->client = self::configureClient();
+        if (!$this->client)
+            $this->client = self::configureClient();
     }
 
     public function addAppBlacklist() {
         $testPolicy =  [  
-           "policyName" => "black list",
-           "description" => "",
-           "compliance" => "enforce",
-           "ownershipType" => "ANY",
            "profile" => [  
-              "profileName" => "black list",
+              "profileFeaturesList" => [  
+                 [  
+                    "featureCode" => "CAMERA",
+                    "deviceTypeId" => 1,
+                    "content" => [  
+                        "enabled" => true
+                    ]
+                 ]
+              ],
+              "profileName" => "Xero",
               "deviceType" => [  
                  "id" => 1
               ],
-              "profileFeaturesList" => [  
-                 [  
-                    "featureCode" => "APP-RESTRICTION",
-                    "deviceTypeId" => 1,
-                    "content" => [  
-                       "restriction-type" => "black-list",
-                       "restricted-applications" => [  
-                          [  
-                             "appName" => "app name1",
-                             "packageName" => "package1"
-                          ],
-                          [  
-                             "appName" => "app name2",
-                             "packageName" => "package2"
-                          ],
-                          [  
-                             "appName" => "app name3",
-                             "packageName" => "package3"
-                          ]
-                       ]
-                    ]
-                 ]
-              ]
            ],
+           "policyName" => "Xero",
+           "compliance" => "enforce",
+           "ownershipType" => "ANY",
+           "description" => "",
            "roles" => [  
               "ANY"
            ]
@@ -108,6 +97,36 @@ class Wso2emmService
         if ($this->debug) print_r($responseBody);
     }
 
+    public function getPolicyObjectByName($policyName, $deviceTypeId) {
+        $allPolicies = $this->getAllPolicyDetails();
+        $policyName .= '::' . $deviceTypeId;
+        $policies = array_values(array_filter(
+          $allPolicies,
+          function ($p) use ($policyName) { return $p->policyName == $policyName; }
+        ));
+
+        if (empty($policies))
+         return null;
+
+        $policy = $policies[0]; //FIXME: more efficient and check matches
+
+        if ($this->debug) print_r($policy);
+        return $policy;
+    }
+
+    public function getAllPolicyDetails() {
+        if ($this->allPolicyDetails)
+            return $this->allPolicyDetails;
+
+        $response = $this->client->get('/mdm-admin/policies');
+        $responseBody = json_decode($response->getBody());
+        if ($this->debug) print_r($responseBody);
+        $content = $responseBody->responseContent;
+        $this->allPolicyDetails = $content;
+        $this->allPolicyIds = array_map(function ($policy) { return $policy->id; }, $content);
+        return $content;
+    }
+
     public function getPolicyDetails($policyId) {
         $response = $this->client->get('/mdm-admin/policies/' . $policyId);
         $responseBody = json_decode($response->getBody());
@@ -115,8 +134,41 @@ class Wso2emmService
         return $responseBody->responseContent;
     }
 
-    public function updatePolicyDetails($policy) {
-        $response = $this->client->put('/mdm-admin/policies/' . $policy->id, ['json' => $policy]);
+    public function removePolicy($policyId) {
+        $this->allPolicyDetails = null;
+
+        try {
+            $response = $this->client->post('/mdm-admin/policies/bulk-remove', ['json' => [$policyId]]);
+        } catch (\GuzzleHttp\Exception\ServerException $e) {
+            \Log::warning('Failed remove policy');
+            return false;
+        }
+        if ($this->debug) print_r($response->getBody());
+        return true;
+    }
+
+    public function addPolicy($policy, $deviceTypeId=1) {
+        $this->allPolicyDetails = null;
+        // FIXME: horrendously inefficient way to check for clashes, but need more REST API info
+        $policyName = $policy->getName();
+        if (!$policyName || $this->getPolicyObjectByName($policyName, $deviceTypeId))
+            throw new \Exception("Must have a unique WSO2 policy name - " . $policyName . "::" . $deviceTypeId . " is not");
+
+        $policyObject = $policy->toJsonable($deviceTypeId);
+        $response = $this->client->post('/mdm-admin/policies/active-policy', ['json' => $policyObject]);
+        $responseBody = json_decode($response->getBody());
+        if ($this->debug) print_r($responseBody);
+
+        $this->allPolicyDetails = null;
+        $newPolicyObject = $this->getPolicyObjectByName($policyName, $deviceTypeId);
+
+        return $newPolicyObject->id;
+    }
+
+    public function updatePolicy($policyId, $policy, $deviceTypeId) {
+        $this->allPolicyDetails = null;
+        $policyObject = $policy->toJsonable($deviceTypeId);
+        $response = $this->client->put('/mdm-admin/policies/' . $policyId, ['json' => $policyObject]);
         $responseBody = json_decode($response->getBody());
         if ($this->debug) print_r($responseBody);
     }

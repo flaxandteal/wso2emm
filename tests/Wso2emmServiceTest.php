@@ -1,5 +1,6 @@
 <?php
 
+use Flaxandteal\Wso2emm\Policy;
 use Flaxandteal\Wso2emm\Wso2emmService;
 
 use GuzzleHttp\Client;
@@ -49,6 +50,16 @@ class Wso2emmServiceTest extends TestCase
         $wso2emm = new Wso2emmService();
         $wso2emm->client = self::clientFromResponses($responses);
         $wso2emm->getPolicyDetails(1);
+    }
+
+    public function testAddPolicy() {
+        $responses = [
+            self::makeResponse([])
+        ];
+        $wso2emm = new Wso2emmService();
+        $wso2emm->client = self::clientFromResponses($responses);
+        $policy = new Policy();
+        $wso2emm->addPolicy($policy);
     }
 
     public function testUpdatePolicyDetails() {
